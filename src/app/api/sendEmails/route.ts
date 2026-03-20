@@ -1,7 +1,8 @@
+
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-import chromium from '@sparticuz/chromium';
+import chromium from "@sparticuz/chromium-min";
 import type { PuppeteerNode } from "puppeteer-core";
 import fs from "fs";
 import path from "path";
@@ -9,17 +10,17 @@ import { dbConnect } from "../../../../models/dbconnect";
 import { User } from "../../../../models/user";
 import { Order } from "../../../../models/order";
 
-let puppeteer:PuppeteerNode;
+let puppeteer: PuppeteerNode;
 const resend = new Resend(process.env.RESEND_API_KEY!);
 
 const isProduction = process.env.NODE_ENV === "production";
 
 if (isProduction) {
-  const mod= await import("puppeteer-core");
+  const mod = await import("puppeteer-core");
   puppeteer = mod.default;
 } else {
   const mod = await import("puppeteer");
-  puppeteer = ( mod as unknown as { default: PuppeteerNode }).default;
+  puppeteer = (mod as unknown as { default: PuppeteerNode }).default;
 }
 
 interface CartItemInput {
@@ -121,7 +122,8 @@ export async function POST(req: Request) {
     const sgstAmount = sgst;
     const igstAmount = igst;
 
-    const totalAmount = subtotal + cgstAmount + sgstAmount + igstAmount - discount;
+    const totalAmount =
+      subtotal + cgstAmount + sgstAmount + igstAmount - discount;
 
     // Generate PI number
     const now = new Date();
@@ -228,14 +230,29 @@ export async function POST(req: Request) {
       .replace(/{{items}}/g, itemsHtml);
 
     // Generate PDF in memory using Puppeteer
+
+    let cachedExecutablePath: string | undefined;
+
+    async function getExecutablePath() {
+      if (cachedExecutablePath) return cachedExecutablePath;
+
+      if (process.env.NODE_ENV === "production") {
+        
+        cachedExecutablePath = await chromium.executablePath(
+          `${process.env.NEXT_PUBLIC_BASE_URL}/chromium/chromium-pack.tar`,
+        );
+      } else {
+        
+        cachedExecutablePath = undefined;
+      }
+
+      return cachedExecutablePath;
+    }
     const browser = await puppeteer.launch({
+      args: isProduction ? chromium.args : [],
+      executablePath: await getExecutablePath(),
       headless: true,
-      args: isProduction? chromium.args:["--no-sandbox", "--disable-setuid-sandbox"],
-      executablePath: isProduction ? await chromium.executablePath() : undefined,
-      
-
     });
-
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
 
@@ -255,7 +272,7 @@ export async function POST(req: Request) {
     // Send email with PDF attachment via Resend using the generated buffer
     const { data: emailResult, error } = await resend.emails.send({
       from: "sales@electrochembattery.com",
-      to: email,
+      to: "bhardwajashish601@gmail.com",
       subject: `Proforma Invoice ${piNumber} - ElectroChem`,
       html: `<p>Dear ${customerName},</p>
              <p>Thank you for your order. Please find attached the Proforma Invoice <strong>${piNumber}</strong>.</p>
@@ -301,3 +318,4 @@ export async function POST(req: Request) {
     );
   }
 }
+
