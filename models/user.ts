@@ -1,3 +1,4 @@
+
 import mongoose, { Schema, Document, Types } from 'mongoose'
 
 // Address Sub-Schema
@@ -23,9 +24,26 @@ export const orderItemSchema = new Schema({
 
 // Document Uploads Sub-Schema
 const documentUploadSchema = new Schema({
-  aadhar: { type: String, required: true },
-  pan: { type: String, required: true },
-  
+  aadhar: {
+    type: String,
+    required: false,
+    validate: {
+      validator: (v: string | undefined) => !v || /^\d{12}$/.test(String(v).trim()),
+      message: "AADHAR must be exactly 12 digits",
+    },
+  },
+  pan: {
+    type: String,
+    required: false,
+    validate: {
+      validator: (v: string | undefined) => {
+        if (!v) return true
+        const val = String(v).trim().toUpperCase()
+        return /^\d{10}$/.test(val) || /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(val)
+      },
+      message: "PAN must be exactly 10 characters",
+    },
+  },
   gstin: { type: String, required: false },
 })
 
@@ -49,8 +67,8 @@ export interface Address {
 }
 
 export interface DocumentUpload {
-  aadhar:string,
-  pan:string,
+  aadhar?: string,
+  pan?: string,
   // panOrAadhar?: string
   gstin?: string
 }
@@ -76,7 +94,23 @@ const userSchema = new Schema<IUser>({
   userType: { type: String, enum: ['individual', 'reseller', 'oem'], required: true, default: 'individual' },
   addresses: { type: [addressSchema], default: [] },
   order: { type: [{type:Schema.Types.ObjectId}], ref: 'Order', default: [] },
-  documents: { type: documentUploadSchema, default: {} ,required:true},
+  documents: {
+    type: documentUploadSchema,
+    default: {},
+    required: true,
+    validate: {
+      validator: function (this: any, v: { aadhar?: string; pan?: string } | undefined) {
+        // Individuals don't provide documents
+        if (this.userType === "individual") return true;
+        return Boolean(
+          v &&
+            ((v.aadhar && String(v.aadhar).trim()) ||
+              (v.pan && String(v.pan).trim())),
+        );
+      },
+      message: "Either AADHAR or PAN is required",
+    },
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 })
@@ -87,3 +121,4 @@ userSchema.pre<IUser>('save', function (next) {
 })
 
 export const User = mongoose.models.User || mongoose.model<IUser>('User', userSchema)
+
